@@ -9,6 +9,22 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 #Packages
 ```{r, include=FALSE}
+library(dplyr)
+library(reshape2)
+library(corrplot)
+library(caret)
+library(pROC)
+library(gridExtra)
+library(grid)
+library(ggfortify)
+library(purrr)
+library(nnet)
+library(doParallel) # parallel processing
+registerDoParallel()
+require(foreach)
+require(iterators)
+require(parallel)
+#others I had before
 library(tibble)
 library(cvms)
 library(GGally)
@@ -32,10 +48,41 @@ df <- read.csv("~/Documents/Collegiate/Spring_2022/MATH_456/essays/project_5/dat
 numeric <- subset(df, select = -c(id,diagnosis))
 s_df <- scale(numeric)
 ```
+#Understand orriginal data
+```{r}
+#Break up columns into groups, according to their suffix designation 
+#(_mean, _se,and __worst) to perform visualisation plots off.
+data_mean <- subset(df, select = c(diagnosis, radius_mean, texture_mean,perimeter_mean, area_mean, smoothness_mean, compactness_mean, concavity_mean, concave.points_mean, symmetry_mean, fractal_dimension_mean))
+
+data_se <- subset(df, select = c("diagnosis", "radius_se", "texture_se","perimeter_se", "area_se", "smoothness_se", "compactness_se", "concavity_se", "concave.points_se", "symmetry_se", "fractal_dimension_se" ))
+
+data_worst <-subset(df, select = c("diagnosis", "radius_worst", "texture_worst","perimeter_worst", "area_worst", "smoothness_worst", "compactness_worst", "concavity_worst", "concave.points_worst", "symmetry_worst", "fractal_dimension_worst" ))
+
+#Plot histograms of "_mean" variables group by diagnosis
+ggplot(data = melt(data_mean, id.var = "diagnosis"), mapping = aes(x = value)) + 
+    geom_histogram(bins = 10, aes(fill=diagnosis), alpha=0.5) + facet_wrap(~variable, scales =      'free_x')
+#Plot histograms of "_se" variables group by diagnosis
+ggplot(data = melt(data_se, id.var = "diagnosis"), mapping = aes(x = value)) + 
+    geom_histogram(bins = 10, aes(fill=diagnosis), alpha=0.5) + facet_wrap(~variable, scales = 'free_x')
+#Plot histograms of "_worst" variables group by diagnosis
+ggplot(data = melt(data_worst, id.var = "diagnosis"), mapping = aes(x = value)) + 
+    geom_histogram(bins = 10, aes(fill=diagnosis), alpha=0.5) + facet_wrap(~variable, scales = 'free_x')
+```
+#Bivariate/multivariate analysis
+```{r}
+# calculate collinearity
+bc_data <- df[,-c(0:1)]
+#Remove the last column
+bc_data <- bc_data[,-32]
+#Tidy the data
+bc_data$diagnosis <- as.factor(bc_data$diagnosis)
+corMatMy <- cor(bc_data[,2:31])
+corrplot(corMatMy, order = "hclust", tl.cex = 0.7)
+```
 #PCA
 ```{r}
 pca <- prcomp(numeric, scale = TRUE)
-print(pca)
+# print(pca)
 pca.var <- pca$sdev^2
 pca.var.per <- round(pca.var/sum(pca.var)*100, 1)
 pca.var.per
@@ -47,7 +94,7 @@ PC_df <- data.frame(PC = 1:30, var_explained = pca.var.per)
 ```
 #First two principle_componenets
 ```{r}
-ggplot(df, aes(x = pc1, y = pc2, color = diagnosis))+geom_point()
+ggplot(df, aes(x = pc1, y = pc2, color = diagnosis))+geom_point(alpha = 0.6)
 ggplot(PC_df, aes(x = PC, y = var_explained))+geom_col()+labs(x = 'Principal Component', y = 'percent variance explained', title = 'PCA Scree Plot')
 ```
 #First three principle components
@@ -83,6 +130,7 @@ p
 distance <- get_dist(s_df)
 fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
 ```
+#Cluster k = 2
 ```{r}
 k2 <- kmeans(s_df, centers = 2, nstart = 25)
 str(k2)
@@ -190,9 +238,9 @@ ggplot(plt, aes(Prediction,Reference, fill= Freq)) +
 df$outcomes = ifelse(results_df$actual == results_df$predicted, ifelse(results_df$actual == 'Benign', 'True Negative', 'True Positive'), ifelse(results_df$predicted == 'Malignant', 'False Positive', 'False Negative'))
 df$predictions = results_df$predicted
 
-ggplot(df, aes(x = pc1, y = pc2, color = outcomes))+geom_point()+labs(title = 'Actual Diagnosis vs groupings')
+ggplot(df, aes(x = pc1, y = pc2, color = outcomes))+geom_point(alpha = 0.6)+labs(title = 'Actual Diagnosis vs groupings')
 ```
-#First three principle components
+#First three principle components outcomes
 ```{r}
 p <- plot_ly(
   df, x = ~pc1, y = ~pc2, z = ~pc3, 
